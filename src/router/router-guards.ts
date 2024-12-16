@@ -111,66 +111,109 @@ export function createRouterGuards(router: Router, whiteNameList: WhiteNameList)
       }
     }
   });
-
+  // Define a function getComponentName to get the component name of a route
   /** 获取路由对应的组件名称 */
+  /** Get the component name corresponding to the route */
   const getComponentName = (route: RouteLocationNormalized): string[] => {
-    return route.matched
-      .map((n) => {
-        if (!n.meta?.keepAlive) return;
-        const comp = n.components?.default;
-        return comp?.name ?? (comp as any)?.type?.name;
-      })
-      .filter(Boolean);
+    // Map over the matched routes and return the component names
+    return (
+      route.matched
+        .map((n) => {
+          // If the route has a keepAlive meta property, return the component name.
+          // If the route doesn't have the `keepAlive` meta property, skip it.
+          // if the keepAlive is false or undefined, skip (exit)
+          if (!n.meta?.keepAlive) return;
+          // Get the default component from the route record
+          const comp = n.components?.default;
+          // Extract the component name from the `comp` object
+          // If `comp.name` is undefined, try to extract it from `comp.type.name`
+          return comp?.name ?? (comp as any)?.type?.name;
+        })
+        // Filter out any undefined or null values from the mapped array
+        .filter(Boolean)
+    );
   };
 
+  // Use the router.afterEach hook to execute a callback function after every route navigation
   router.afterEach((to, from, failure) => {
+    // This hook is triggered after every route navigation.
     // 跳过自己手动取消路由导航时的错误
+    // It receives the to route, from route, and any navigation failure.
+
+    // Skip errors caused by manually aborted navigation
     if (isNavigationFailure(failure, NavigationFailureType.aborted)) {
+      // Close the progress bar.
       NProgress.done();
-      // console.error('failed navigation', failure);
+      console.error('failed navigation', failure);
       return;
     }
 
+    // Check if the current route has a title meta property
     if (to.meta?.title) {
-      // 设置网页标题
+      // Set the document title using the internationalized title
+      // 设置网页标题 (Set the page title)
       document.title = transformI18n(to.meta.title);
     }
 
+    // Get the keep-alive store instance
     const keepAliveStore = useKeepAliveStore();
 
+    // Get the name of the component to be navigated to.
     // 在这里设置需要缓存的组件名称
+    // Set the component name that needs to be cached here
     const toCompName = getComponentName(to);
+    // If the route is configured for keep-alive:
     // 判断当前页面是否开启缓存，如果开启，则将当前页面的 componentName 信息存入 keep-alive 全局状态
+    //Determine whether the current page is cached. If so, store the componentName information
+    //  of the current page in the keep-alive global state.Determine whether the current page is cached. If so
+    // store the componentName information of the current page in the keep-alive global state.
     if (to.meta?.keepAlive) {
       // 需要缓存的组件
+      // If the component name is obtained, add it to the keep-alive store.
+      // Components that need to be cached
       if (toCompName) {
+        // FIXME: toCompName is alway true
         keepAliveStore.add(toCompName);
       } else {
+        // Log a warning if the component name is missing.
         console.warn(
           `${to.fullPath}页面组件的keepAlive为true但未设置组件名，会导致缓存失效，请检查`,
         );
       }
     } else {
       // 不需要缓存的组件
+      // If the route is not configured for keep-alive:
+      // If the component name is obtained, remove it from the keep-alive store.
       if (toCompName) {
         keepAliveStore.remove(toCompName);
       }
     }
+    // Check if the current route is the Redirect page
     // 如果进入的是 Redirect 页面，则也将离开页面的缓存清空(刷新页面的操作)
+    // If you enter a Redirect page, the cache of the page you left will also be cleared
     if (to.name === REDIRECT_NAME) {
+      // Get the component name of the previous route
       const fromCompName = getComponentName(from);
+      // Remove the previous route's component name from the keep-alive store
       fromCompName && keepAliveStore.remove(fromCompName);
     }
+
+    // Get the user store instance
     const userStore = useUserStore();
+    // If the user is logged out, clear the entire keep-alive cache.
     // 如果用户已登出，则清空所有缓存的组件
     if (!userStore.token) {
+      // Clear all cached components from the keep-alive store
       keepAliveStore.clear();
     }
+    // Uncomment to log the current keep-alive store for debugging.
     // console.log('keepAliveStore', keepAliveStore.list);
     NProgress.done(); // finish progress bar
   });
 
   router.onError((error) => {
-    console.error('路由错误', error);
+    // This function is a global error handler for the router.
+    // It will be called whenever an error occurs during navigation.
+    console.error('路由错误', error); // Log the error to the console for debugging purposes.
   });
 }
